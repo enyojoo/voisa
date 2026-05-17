@@ -1,0 +1,73 @@
+/**
+ * ISO codes supported by Soniox STT / real-time translation (two-way pairs).
+ * Keep aligned with https://soniox.com/docs/stt/concepts/supported-languages
+ */
+export type SonioxLanguage = { code: string; label: string };
+
+export const SONIOX_LANGUAGES: SonioxLanguage[] = [
+  { code: 'af', label: 'Afrikaans' },
+  { code: 'sq', label: 'Albanian' },
+  { code: 'ar', label: 'Arabic' },
+  { code: 'az', label: 'Azerbaijani' },
+  { code: 'eu', label: 'Basque' },
+  { code: 'be', label: 'Belarusian' },
+  { code: 'bn', label: 'Bengali' },
+  { code: 'bs', label: 'Bosnian' },
+  { code: 'bg', label: 'Bulgarian' },
+  { code: 'ca', label: 'Catalan' },
+  { code: 'zh', label: 'Chinese' },
+  { code: 'hr', label: 'Croatian' },
+  { code: 'cs', label: 'Czech' },
+  { code: 'da', label: 'Danish' },
+  { code: 'nl', label: 'Dutch' },
+  { code: 'en', label: 'English' },
+  { code: 'et', label: 'Estonian' },
+  { code: 'fi', label: 'Finnish' },
+  { code: 'fr', label: 'French' },
+  { code: 'gl', label: 'Galician' },
+  { code: 'de', label: 'German' },
+  { code: 'el', label: 'Greek' },
+  { code: 'gu', label: 'Gujarati' },
+  { code: 'he', label: 'Hebrew' },
+  { code: 'hi', label: 'Hindi' },
+  { code: 'hu', label: 'Hungarian' },
+  { code: 'id', label: 'Indonesian' },
+  { code: 'it', label: 'Italian' },
+  { code: 'ja', label: 'Japanese' },
+  { code: 'kn', label: 'Kannada' },
+  { code: 'kk', label: 'Kazakh' },
+  { code: 'ko', label: 'Korean' },
+  { code: 'lv', label: 'Latvian' },
+  { code: 'lt', label: 'Lithuanian' },
+  { code: 'mk', label: 'Macedonian' },
+  { code: 'ms', label: 'Malay' },
+  { code: 'ml', label: 'Malayalam' },
+  { code: 'mr', label: 'Marathi' },
+  { code: 'no', label: 'Norwegian' },
+  { code: 'fa', label: 'Persian' },
+  { code: 'pl', label: 'Polish' },
+  { code: 'pt', label: 'Portuguese' },
+  { code: 'pa', label: 'Punjabi' },
+  { code: 'ro', label: 'Romanian' },
+  { code: 'ru', label: 'Russian' },
+  { code: 'sr', label: 'Serbian' },
+  { code: 'sk', label: 'Slovak' },
+  { code: 'sl', label: 'Slovenian' },
+  { code: 'es', label: 'Spanish' },
+  { code: 'sw', label: 'Swahili' },
+  { code: 'sv', label: 'Swedish' },
+  { code: 'tl', label: 'Tagalog' },
+  { code: 'ta', label: 'Tamil' },
+  { code: 'te', label: 'Telugu' },
+  { code: 'th', label: 'Thai' },
+  { code: 'tr', label: 'Turkish' },
+  { code: 'uk', label: 'Ukrainian' },
+  { code: 'ur', label: 'Urdu' },
+  { code: 'vi', label: 'Vietnamese' },
+  { code: 'cy', label: 'Welsh' },
+].sort((a, b) => a.label.localeCompare(b.label));
+
+export function sonioxLanguageLabel(code: string): string {
+  const c = code.trim().toLowerCase();
+  return SONIOX_LANGUAGES.find((l) => l.code === c)?.label ?? c.toUpperCase();
+}
