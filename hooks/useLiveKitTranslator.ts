@@ -1,3 +1,4 @@
+import { voisaRemoteAudioTrackVolume } from '@/lib/config';
 import { mintLiveKitToken } from '@/lib/livekit/token';
 import { mergeContinuationParagraph, sanitizeTranscriptDisplay, translationForDisplay } from '@/lib/transcriptDisplay';
 import {
@@ -94,8 +95,9 @@ function waitUntilRoomConnected(room: Room, timeoutMs: number): Promise<void> {
 /** Extra headroom vs SDK defaults — reduces premature ICE timeouts during LiveKit Cloud migration (disconnect reason 14 = CONNECTION_TIMEOUT). */
 const ROOM_CONNECT_OPTS = {
   autoSubscribe: true,
-  peerConnectionTimeout: 45_000,
-  websocketTimeout: 45_000,
+  /** Slightly above LiveKit Cloud defaults — reduces spurious ICE / WS timeouts on cellular Wi‑Fi handoff. */
+  peerConnectionTimeout: 60_000,
+  websocketTimeout: 60_000,
   maxRetries: 3,
 } as const;
 
@@ -127,8 +129,14 @@ function appleAudioPreferSpeaker(
 async function prepareLiveKitAudioSession(): Promise<void> {
   if (Platform.OS !== 'ios' && Platform.OS !== 'android') return;
 
-  /** RN WebRTC applies this gain before OS/hardware mixing — keep at 1 so device volume buttons behave normally. */
-  await AudioSession.setDefaultRemoteAudioTrackVolume(1);
+  /**
+   * RN WebRTC applies this gain before OS/hardware mixing — keep at 1 so device volume buttons behave normally.
+   *
+   * **Crackling only on phone, not on agent logs:** try wired headphones vs speaker vs Bluetooth (BT adds codec +
+   * jitter). Rule out CPU throttling (low power mode). If agent-side `tts_metrics` look healthy but playback
+   * glitches, suspect WebRTC jitter buffer / route — not Soniox mux.
+   */
+  await AudioSession.setDefaultRemoteAudioTrackVolume(voisaRemoteAudioTrackVolume());
 
   if (Platform.OS === 'android') {
     await AudioSession.configureAudio({

@@ -35,3 +35,16 @@ export function supabaseFunctionsInvokeRegion(): FunctionRegion | undefined {
   const v = raw.trim();
   return KNOWN_SUPABASE_FUNCTION_REGIONS.has(v) ? (v as FunctionRegion) : undefined;
 }
+
+/**
+ * LiveKit agent remote audio gain (default 1). Lower slightly (e.g. 0.92) if the interpreter track clips the
+ * device speaker; raise only if you intentionally need more headroom (max 1.5).
+ */
+export function voisaRemoteAudioTrackVolume(): number {
+  const raw =
+    getExtra('EXPO_PUBLIC_VOISA_REMOTE_AUDIO_VOLUME') ?? process.env.EXPO_PUBLIC_VOISA_REMOTE_AUDIO_VOLUME;
+  if (!raw?.trim()) return 1;
+  const n = Number.parseFloat(raw.trim());
+  if (!Number.isFinite(n)) return 1;
+  return Math.min(1.5, Math.max(0.25, n));
+}

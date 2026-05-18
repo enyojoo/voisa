@@ -1,0 +1,39 @@
+# Deploy the LiveKit Cloud agent when translator-agent code changes.
+# Uses https://github.com/livekit/deploy-action
+#
+# Required Actions secrets (repo → Settings → Secrets and variables → Actions):
+#   LIVEKIT_URL, LIVEKIT_API_KEY, LIVEKIT_API_SECRET, SONIOX_API_KEY
+# (Declared in repo-root actionlint.yaml for static checks.)
+
+name: Deploy translator-agent (LiveKit Cloud)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'translator-agent/**'
+      - '!translator-agent/**/*.md'
+      - '!translator-agent/secrets.deploy.env'
+  workflow_dispatch:
+
+concurrency:
+  group: livekit-deploy-translator-agent
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy LiveKit Cloud Agent
+        uses: livekit/deploy-action@v2.12.1
+        env:
+          LIVEKIT_URL: ${{ secrets.LIVEKIT_URL }}
+          LIVEKIT_API_KEY: ${{ secrets.LIVEKIT_API_KEY }}
+          LIVEKIT_API_SECRET: ${{ secrets.LIVEKIT_API_SECRET }}
+          # Comma-separated KEY=value pairs for the agent runtime (add more GitHub secrets + entries as needed).
+          SECRET_LIST: SONIOX_API_KEY=${{ secrets.SONIOX_API_KEY }}
+        with:
+          OPERATION: deploy
+          WORKING_DIRECTORY: translator-agent

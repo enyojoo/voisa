@@ -17,6 +17,7 @@ import { fileURLToPath } from 'node:url';
 import { PassthroughTranslationLLM } from './passthrough_llm.js';
 import { SonioxRealtimeTTS } from './soniox_tts.js';
 import { SonioxTranslationSTT, type VoisaTranscriptBridgePayload } from './soniox_stt.js';
+import { attachVoisaCrackDiagnostics } from './voisa_crack_diagnostics.js';
 import { VoisaInterpretationCoordinator } from './voisa_interpretation_coordinator.js';
 
 dotenv.config({ path: '.env.local' });
@@ -191,6 +192,19 @@ export default defineAgent<ProcessUserData>({
     });
 
     interpretation = new VoisaInterpretationCoordinator(session, logger);
+
+    attachVoisaCrackDiagnostics(session, logger);
+
+    logger.info(
+      {
+        event: 'voisa_agent_start',
+        roomName: ctx.room.name,
+        ttsProvider,
+        /** Correlate with Expo / LiveKit dashboards; compare `tts_metrics` TTFB vs audible crackling. */
+        metricsHint: 'MetricsCollected logs ttfbMs/audioDurationMs per speech_id',
+      },
+      'Voisa translator agent session ready',
+    );
 
     session.on(voice.AgentSessionEventTypes.MetricsCollected, (ev) => {
       metrics.logMetrics(ev.metrics);

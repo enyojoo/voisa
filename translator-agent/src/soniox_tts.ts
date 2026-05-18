@@ -7,7 +7,7 @@ import {
   tts,
   type APIConnectOptions,
 } from '@livekit/agents';
-import type { AudioFrame } from '@livekit/rtc-node';
+import { AudioFrame } from '@livekit/rtc-node';
 import WebSocket from 'ws';
 
 import { defaultSonioxVoiceForLanguage } from './soniox_tts_voice_defaults.js';
@@ -75,8 +75,30 @@ function parsePositiveInt(key: string): number | undefined {
   return Number.isFinite(n) && n > 0 ? Math.floor(n) : undefined;
 }
 
+/**
+ * Soniox returns 400 if `bitrate` / `audio_codec_bitrate` is sent with PCM — bit depth is implied by format + sample_rate.
+ * Use bitrate only for compressed outputs (e.g. Opus), per Soniox TTS websocket docs.
+ */
+function sonioxTtsFormatSupportsCodecBitrate(audioFormat: string): boolean {
+  const f = audioFormat.trim().toLowerCase();
+  return !f.startsWith('pcm_');
+}
+
 function sonioxTtsKeepaliveIntervalMs(): number {
   return parsePositiveInt('SONIOX_TTS_KEEPALIVE_INTERVAL_MS') ?? 25_000;
+}
+
+/** Linear PCM micro-fades on each Soniox stream — softens clip-like attack/release on the agent track. */
+function parseFadeMsEnv(key: string, fallback: number): number {
+  const raw = envTrim(key);
+  if (!raw) return fallback;
+  const n = Number.parseFloat(raw);
+  if (!Number.isFinite(n) || n < 0) return fallback;
+  return Math.min(80, n);
+}
+
+function clampInt16(v: number): number {
+  return Math.max(-32768, Math.min(32767, Math.round(v)));
 }
 
 async function wsOpened(ws: WebSocket): Promise<void> {
@@ -298,7 +320,18 @@ export class SonioxRealtimeTTS extends tts.TTS {
 
     super(sampleRate, 1, { streaming: true });
 
-    const bitrate = opts?.bitrate ?? parsePositiveInt('SONIOX_TTS_BITRATE');
+    const audioFormat = opts?.audioFormat ?? envTrim('SONIOX_TTS_AUDIO_FORMAT') ?? 'pcm_s16le';
+    const rawBitrate = opts?.bitrate ?? parsePositiveInt('SONIOX_TTS_BITRATE');
+    const bitrate =
+      rawBitrate !== undefined && sonioxTtsFormatSupportsCodecBitrate(audioFormat)
+        ? rawBitrate
+        : undefined;
+    if (rawBitrate !== undefined && bitrate === undefined) {
+      log().info(
+        { audioFormat, ignoredBitrate: rawBitrate },
+        'SONIOX_TTS_BITRATE ignored for PCM Soniox TTS (no codec bitrate); remove SONIOX_TTS_BITRATE or use a compressed SONIOX_TTS_AUDIO_FORMAT.',
+      );
+    }
 
     const langRaw =
       opts?.language ?? envTrim('SONIOX_TTS_LANGUAGE') ?? envTrim('TRANSLATION_LANGUAGE_B') ?? 'en';
@@ -337,12 +370,25 @@ export class SonioxRealtimeTTS extends tts.TTS {
       baseUrl,
       model: opts?.model ?? envTrim('SONIOX_TTS_MODEL') ?? 'tts-rt-v1',
       voice: voiceResolved,
-      audioFormat: opts?.audioFormat ?? envTrim('SONIOX_TTS_AUDIO_FORMAT') ?? 'pcm_s16le',
+      audioFormat,
       sampleRate,
       ...(bitrate !== undefined ? { bitrate } : {}),
     };
 
     this.#language = langNorm;
+
+    if (envTrim('VOISA_DEBUG_AUDIO') === '1') {
+      log().info(
+        {
+          sampleRate: this.#opts.sampleRate,
+          audioFormat: this.#opts.audioFormat,
+          bitrate: this.#opts.bitrate,
+          model: this.#opts.model,
+          baseUrl: this.#opts.baseUrl,
+        },
+        'Soniox TTS output shape (verify alignment with LiveKit agent audio path)',
+      );
+    }
   }
 
   override get model(): string {
@@ -421,21 +467,15 @@ class SonioxRealtimeSynthesizeStream extends tts.SynthesizeStream {
 
     await mux.ensureOpen();
 
+    const fadeInMs = parseFadeMsEnv('VOISA_TTS_FADE_IN_MS', 8);
+    const fadeOutMs = parseFadeMsEnv('VOISA_TTS_FADE_OUT_MS', 10);
+    const samplesFadeIn = Math.floor((this.#ttsOpts.sampleRate * fadeInMs) / 1000);
+    const samplesFadeOut = Math.floor((this.#ttsOpts.sampleRate * fadeOutMs) / 1000);
+
     const bstream = new AudioByteStream(this.#ttsOpts.sampleRate, 1);
     const requestId = shortuuid('tts_request_');
 
     let lastFrame: AudioFrame | undefined;
-
-    const sendLastFrame = (segmentId: string | undefined, final: boolean) => {
-      if (!lastFrame || !segmentId) return;
-      this.queue.put({
-        requestId,
-        segmentId,
-        frame: lastFrame,
-        final,
-      });
-      lastFrame = undefined;
-    };
 
     let recvFailed: Error | undefined;
 
@@ -453,41 +493,87 @@ class SonioxRealtimeSynthesizeStream extends tts.SynthesizeStream {
         ...(this.#ttsOpts.bitrate !== undefined ? { bitrate: this.#ttsOpts.bitrate } : {}),
       });
 
-      const inboundForSegment = (sid: string) => (res: SonioxTtsInbound) => {
-        if (res.stream_id !== undefined && res.stream_id !== sid) return;
+      const makeInboundHandler = (sid: string) => {
+        let fadeInSamplesLeft = samplesFadeIn;
 
-        if (res.error_code !== undefined) {
-          const msg = `Soniox TTS error ${res.error_code}: ${res.error_message ?? ''}`;
-          log().error(
-            { sonioxErrorCode: res.error_code, sonioxErrorMessage: res.error_message, stream_id: sid },
-            msg,
-          );
-          /** Stream-scoped failure — Soniox sends `terminated` next; finish in that branch. https://soniox.com/docs/tts/rt/streams#error-isolation */
-          recvFailed = new Error(msg);
-          return;
-        }
-
-        if (res.audio) {
-          const buf = Buffer.from(res.audio, 'base64');
-          const view = new Int8Array(buf);
-          for (const frame of bstream.write(view.buffer)) {
-            sendLastFrame(sid, false);
-            lastFrame = frame;
+        const emitQueuedFrame = (final: boolean) => {
+          if (!lastFrame) return;
+          let frame = lastFrame;
+          const needIn = samplesFadeIn > 0 && fadeInSamplesLeft > 0;
+          const needOut = final && samplesFadeOut > 0;
+          if (needIn || needOut) {
+            if (frame.channels === 1) {
+              const data = new Int16Array(frame.data);
+              if (needIn) {
+                let i = 0;
+                while (i < data.length && fadeInSamplesLeft > 0) {
+                  const progressed = samplesFadeIn - fadeInSamplesLeft;
+                  const gain = (progressed + 1) / samplesFadeIn;
+                  data[i] = clampInt16(data[i]! * gain);
+                  i++;
+                  fadeInSamplesLeft--;
+                }
+              }
+              if (needOut) {
+                const n = Math.min(samplesFadeOut, data.length);
+                if (n === 1) {
+                  data[data.length - 1]! = 0;
+                } else if (n > 1) {
+                  for (let t = 0; t < n; t++) {
+                    const idx = data.length - n + t;
+                    const gain = (n - 1 - t) / (n - 1);
+                    data[idx] = clampInt16(data[idx]! * gain);
+                  }
+                }
+              }
+              frame = new AudioFrame(data, frame.sampleRate, frame.channels, frame.samplesPerChannel);
+            }
           }
-        }
+          this.queue.put({
+            requestId,
+            segmentId: sid,
+            frame,
+            final,
+          });
+          lastFrame = undefined;
+        };
 
-        if (res.audio_end) {
-          for (const frame of bstream.flush()) {
-            sendLastFrame(sid, false);
-            lastFrame = frame;
+        return (res: SonioxTtsInbound) => {
+          if (res.stream_id !== undefined && res.stream_id !== sid) return;
+
+          if (res.error_code !== undefined) {
+            const msg = `Soniox TTS error ${res.error_code}: ${res.error_message ?? ''}`;
+            log().error(
+              { sonioxErrorCode: res.error_code, sonioxErrorMessage: res.error_message, stream_id: sid },
+              msg,
+            );
+            /** Stream-scoped failure — Soniox sends `terminated` next; finish in that branch. https://soniox.com/docs/tts/rt/streams#error-isolation */
+            recvFailed = new Error(msg);
+            return;
           }
-          sendLastFrame(sid, true);
-        }
 
-        if (res.terminated) {
-          mux.unregisterStream(sid);
-          resolveTerminated(sid);
-        }
+          if (res.audio) {
+            const buf = Buffer.from(res.audio, 'base64');
+            const view = new Int8Array(buf);
+            for (const frame of bstream.write(view.buffer)) {
+              emitQueuedFrame(false);
+              lastFrame = frame;
+            }
+          }
+
+          if (res.audio_end) {
+            for (const frame of bstream.flush()) {
+              emitQueuedFrame(false);
+              lastFrame = frame;
+            }
+            emitQueuedFrame(true);
+          }
+
+          if (res.terminated) {
+            mux.unregisterStream(sid);
+            resolveTerminated(sid);
+          }
+        };
       };
 
       /** Normal completion: `text_end` → server `audio_end` → `terminated` — https://soniox.com/docs/tts/rt/termination */
@@ -511,7 +597,7 @@ class SonioxRealtimeSynthesizeStream extends tts.SynthesizeStream {
       const ensureSegment = async () => {
         if (activeStreamId) return;
         const sid = shortuuid('soniox_tts_');
-        mux.registerStream(sid, inboundForSegment(sid));
+        mux.registerStream(sid, makeInboundHandler(sid));
         mux.send(configPayload(sid));
         activeStreamId = sid;
       };

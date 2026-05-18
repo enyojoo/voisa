@@ -158,6 +158,24 @@ function trimPersistFinals(list: SonioxToken[]): void {
   while (list.length > MAX_PERSIST_FINALS) list.shift();
 }
 
+/** Soniox may repeat the same final token across WS messages; pushing twice duplicates source text in `concatSpoken`. */
+function sonioxFinalTokenKey(t: SonioxToken): string | null {
+  const { start_ms: a, end_ms: b } = t;
+  if (typeof a === 'number' && typeof b === 'number' && Number.isFinite(a) && Number.isFinite(b)) {
+    return `${a}\0${b}\0${t.translation_status ?? 'none'}\0${t.text ?? ''}`;
+  }
+  return null;
+}
+
+function persistFinalsHasDuplicate(list: SonioxToken[], token: SonioxToken): boolean {
+  const k = sonioxFinalTokenKey(token);
+  if (!k) return false;
+  for (const p of list) {
+    if (sonioxFinalTokenKey(p) === k) return true;
+  }
+  return false;
+}
+
 /** Soniox semantic endpoint marker (`<end>`). See https://soniox.com/docs/stt/rt/endpoint-detection */
 function isSonioxUtteranceEndMarker(token: SonioxToken): boolean {
   if (!token.is_final || token.text === undefined || token.text === null) return false;
@@ -554,7 +572,13 @@ class SonioxSpeechStream extends stt.SpeechStream {
     };
 
     /** Tune vs device/network: lower = snappier UI, higher = fewer `publishData` packets (LiveKit data-channel budget). */
-    const BRIDGE_COALESCE_MS = 55;
+    const BRIDGE_COALESCE_MS = (() => {
+      const raw = process.env.VOISA_TRANSCRIPT_BRIDGE_COALESCE_MS?.trim();
+      if (!raw) return 55;
+      const n = Number.parseInt(raw, 10);
+      return Number.isFinite(n) && n >= 20 && n <= 500 ? n : 55;
+    })();
+    const debugTranscriptBridge = process.env.VOISA_DEBUG_TRANSCRIPT_BRIDGE?.trim() === '1';
     let bridgeFlushTimer: ReturnType<typeof setTimeout> | null = null;
     let coalescedPartial: Omit<VoisaTranscriptBridgePayload, 'type'> | null = null;
 
@@ -688,8 +712,10 @@ class SonioxSpeechStream extends stt.SpeechStream {
             continue;
           }
           if (token.is_final) {
-            persistFinals.push(token);
-            trimPersistFinals(persistFinals);
+            if (!persistFinalsHasDuplicate(persistFinals, token)) {
+              persistFinals.push(token);
+              trimPersistFinals(persistFinals);
+            }
           } else {
             msgNonFinal.push(token);
           }
@@ -733,20 +759,17 @@ class SonioxSpeechStream extends stt.SpeechStream {
           }
 
           if (spokenDraft.length > 0 || translationDraft.length > 0) {
-            /**
-             * Trace one line per partial so we can confirm Soniox is interleaving translation tokens with originals
-             * during the same utterance (per https://soniox.com/docs/stt/rt/real-time-translation). If `translated`
-             * stays at length 0 across many partials, the model/translation config is the bottleneck, not the UI.
-             */
-            log().debug(
-              {
-                originalLen: spokenDraft.length,
-                translatedLen: translationDraft.length,
-                originalTail: spokenDraft.slice(-32),
-                translatedTail: translationDraft.slice(-32),
-              },
-              'voisa.transcript partial bridge',
-            );
+            if (debugTranscriptBridge) {
+              log().debug(
+                {
+                  originalLen: spokenDraft.length,
+                  translatedLen: translationDraft.length,
+                  originalTail: spokenDraft.slice(-32),
+                  translatedTail: translationDraft.slice(-32),
+                },
+                'voisa.transcript partial bridge',
+              );
+            }
             bridgePartialCoalesced({
               original: spokenDraft,
               translated: translationDraft,

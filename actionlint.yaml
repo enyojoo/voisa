@@ -1,0 +1,7 @@
+# Declares GitHub Actions secrets referenced in workflows (silences actionlint / editor false positives).
+# Create these under: Repo → Settings → Secrets and variables → Actions.
+secrets:
+  - LIVEKIT_URL
+  - LIVEKIT_API_KEY
+  - LIVEKIT_API_SECRET
+  - SONIOX_API_KEY

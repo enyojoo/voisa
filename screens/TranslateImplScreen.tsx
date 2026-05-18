@@ -386,6 +386,16 @@ export default function TranslateScreenImpl() {
                 : item.original.trim();
               return (
                 <View key={item.id} style={styles.transcriptCard}>
+                  <Text
+                    style={styles.originalSecondary}
+                    selectable
+                    accessibilityHint={`Spoken (${sonioxLanguageLabel(languageLeft)})`}
+                  >
+                    {originalDisplay || '…'}
+                  </Text>
+
+                  <View style={styles.transcriptDivider} />
+
                   {translatedDisplay ? (
                     <Text
                       style={styles.translationPrimary}
@@ -406,16 +416,15 @@ export default function TranslateScreenImpl() {
                       <Animated.View style={[styles.translatingDot, { opacity: dot3 }]} />
                     </View>
                   ) : null}
-
-                  <View style={styles.transcriptDivider} />
-
-                  <Text
-                    style={styles.originalSecondary}
-                    selectable
-                    accessibilityHint={`Spoken (${sonioxLanguageLabel(languageLeft)})`}
-                  >
-                    {originalDisplay || '…'}
-                  </Text>
+                  {!translatedDisplay && !showInlinePulse ? (
+                    <Text
+                      style={styles.translationPrimary}
+                      selectable={false}
+                      accessibilityHint={`Translated (${sonioxLanguageLabel(languageRight)})`}
+                    >
+                      …
+                    </Text>
+                  ) : null}
                 </View>
               );
             })}
@@ -440,6 +449,16 @@ export default function TranslateScreenImpl() {
 
             {hasLiveLine && lk.liveContinuationSegmentId === null ? (
               <View style={styles.transcriptCard} accessibilityLiveRegion="polite">
+                <Text
+                  style={styles.originalSecondary}
+                  selectable
+                  accessibilityHint={`Spoken (${sonioxLanguageLabel(languageLeft)})`}
+                >
+                  {liveOriginalDisplay}
+                </Text>
+
+                <View style={styles.transcriptDivider} />
+
                 {hasVoisaTranslated ? (
                   <Text
                     style={styles.translationPrimary}
@@ -459,16 +478,6 @@ export default function TranslateScreenImpl() {
                     <Animated.View style={[styles.translatingDot, { opacity: dot3 }]} />
                   </View>
                 )}
-
-                <View style={styles.transcriptDivider} />
-
-                <Text
-                  style={styles.originalSecondary}
-                  selectable
-                  accessibilityHint={`Spoken (${sonioxLanguageLabel(languageLeft)})`}
-                >
-                  {liveOriginalDisplay}
-                </Text>
               </View>
             ) : null}
 
@@ -763,7 +772,7 @@ const styles = StyleSheet.create({
     borderRadius: 5,
     backgroundColor: colors.text,
   },
-  /** Visual breathing room between the primary translation block and spoken source below. */
+  /** Breathing room between the small source line (top) and the large translation block (below). */
   transcriptDivider: {
     height: StyleSheet.hairlineWidth,
     backgroundColor: colors.border,

@@ -35,6 +35,7 @@ class PassthroughTranslationLLMStream extends llm.LLMStream {
     /**
      * {@link VoisaInterpretationCoordinator} drives `session.say` from streaming `voisa.transcript`.
      * Emitting the same line here would replay the translation at end-of-turn (duplicate audio).
+     * Close immediately so no empty `pipelineReply` / preemptive TTS competes with `allowInterruptions: false` speech.
      */
     this.queue.close();
   }
