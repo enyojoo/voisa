@@ -5,13 +5,17 @@ import Constants, { ExecutionEnvironment } from 'expo-constants';
 import { useFonts } from 'expo-font';
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
+import { StatusBar } from 'expo-status-bar';
+import * as SystemUI from 'expo-system-ui';
 import { useEffect } from 'react';
 import { useColorScheme } from 'react-native';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { configureVoisaRuntimeLogging } from '@/lib/logging/configureClientLogging';
 import { ensureRtcPeerConnectionLegacyCompat } from '@/lib/polyfills/livekitRtcCompat';
 import { canUseLiveKitWebRTC } from '@/lib/livekit/nativeAvailability';
 import { AuthProvider, useAuth } from '@/providers/AuthProvider';
+import { colors } from '@/theme/tokens';
 
 export { ErrorBoundary } from 'expo-router';
 
@@ -57,9 +61,11 @@ export default function RootLayout() {
   }
 
   return (
-    <AuthProvider>
-      <SplashGate />
-    </AuthProvider>
+    <SafeAreaProvider>
+      <AuthProvider>
+        <SplashGate />
+      </AuthProvider>
+    </SafeAreaProvider>
   );
 }
 
@@ -81,13 +87,22 @@ function SplashGate() {
 
 function RootLayoutNav() {
   const colorScheme = useColorScheme();
+  const isDark = colorScheme === 'dark';
+
+  useEffect(() => {
+    void SystemUI.setBackgroundColorAsync(isDark ? '#000000' : colors.background);
+  }, [isDark]);
+
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <Stack screenOptions={{ headerShown: false }}>
-        <Stack.Screen name="index" />
-        <Stack.Screen name="(auth)" />
-        <Stack.Screen name="(app)" />
-      </Stack>
-    </ThemeProvider>
+    <>
+      <StatusBar style={isDark ? 'light' : 'dark'} />
+      <ThemeProvider value={isDark ? DarkTheme : DefaultTheme}>
+        <Stack screenOptions={{ headerShown: false }}>
+          <Stack.Screen name="index" />
+          <Stack.Screen name="(auth)" />
+          <Stack.Screen name="(app)" />
+        </Stack>
+      </ThemeProvider>
+    </>
   );
 }

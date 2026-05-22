@@ -1,11 +1,16 @@
+/** Voisa brand olive — keep in sync with splash/adaptive icon in app.json */
+export const brandPrimary = '#93A000';
+
 export const colors = {
   background: '#FFFFFF',
   text: '#111827',
   textMuted: '#9CA3AF',
   textSecondary: '#6B7280',
-  primary: '#2563EB',
-  primaryRing: '#93C5FD',
-  navy: '#0F172A',
+  primary: brandPrimary,
+  primaryDark: '#6F7800',
+  primaryLight: '#B8C933',
+  primaryRing: '#C4D14D',
+  navy: '#3D4500',
   purple: '#7C3AED',
   purpleMuted: '#A78BFA',
   danger: '#EF4444',

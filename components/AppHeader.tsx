@@ -97,7 +97,7 @@ const styles = StyleSheet.create({
   brand: {
     fontSize: 22,
     fontWeight: '700',
-    color: colors.navy,
+    color: colors.primary,
     letterSpacing: -0.5,
   },
   avatarOuter: {

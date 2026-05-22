@@ -677,7 +677,7 @@ const styles = StyleSheet.create({
     fontSize: 34,
     fontWeight: '700',
     letterSpacing: -0.8,
-    color: colors.navy,
+    color: colors.primary,
     textAlign: 'center',
   },
   heroSubtitle: {
@@ -691,7 +691,7 @@ const styles = StyleSheet.create({
     fontSize: 34,
     fontWeight: '700',
     letterSpacing: -0.8,
-    color: colors.navy,
+    color: colors.primary,
     textAlign: 'center',
   },
   listeningInScroll: {

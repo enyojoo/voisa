@@ -98,7 +98,7 @@ const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.background },
   flex: { flex: 1, justifyContent: 'center', padding: spacing.lg },
   card: { gap: spacing.md },
-  title: { fontSize: 28, fontWeight: '700', color: colors.text },
+  title: { fontSize: 28, fontWeight: '700', color: colors.primary },
   subtitle: { fontSize: 16, color: colors.textSecondary, marginBottom: spacing.sm },
   input: {
     borderWidth: 1,

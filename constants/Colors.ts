@@ -1,5 +1,7 @@
-const tintColorLight = '#2f95dc';
-const tintColorDark = '#fff';
+import { brandPrimary } from '@/theme/tokens';
+
+const tintColorLight = brandPrimary;
+const tintColorDark = '#FFFFFF';
 
 export default {
   light: {

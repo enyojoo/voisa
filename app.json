@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "voisa",
+    "name": "Voisa",
     "slug": "voisa",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -16,6 +16,7 @@
         "tinted": "./assets/icons/ios-tinted.png"
       },
       "infoPlist": {
+        "CFBundleDisplayName": "Voisa",
         "ITSAppUsesNonExemptEncryption": false,
         "NSMicrophoneUsageDescription": "Voisa uses the microphone for live speech translation."
       }
@@ -51,7 +52,7 @@
           "backgroundColor": "#93A000",
           "dark": {
             "image": "./assets/icons/splash-icon-dark.png",
-            "backgroundColor": "#000000"
+            "backgroundColor": "#93A000"
           },
           "imageWidth": 200
         }
