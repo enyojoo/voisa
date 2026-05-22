@@ -48,9 +48,10 @@ const USE_TEXT_STREAM = parseEnvBool('VOISA_TTS_USE_TEXT_STREAM', true);
 /** Stream mode: wait for this much new translated text before first enqueue in an utterance (reduces instant micro-speak). */
 const STREAM_MIN_CHARS = parseEnvInt('VOISA_TTS_STREAM_MIN_CHARS', 8, 0, 200);
 
-/** Lenient ASR: only drop in-flight TTS when originals clearly diverged (avoids cutting readout on jitter). */
+/** Lenient ASR: only drop in-flight TTS when a **finalized** utterance plainly contradicts prior source (never on partial drafts). */
 const ASR_REWRITE_STRICT = parseEnvBool('VOISA_ASR_REWRITE_STRICT', false);
-const ASR_REWRITE_MIN_COMMON = parseEnvInt('VOISA_ASR_REWRITE_MIN_COMMON_CHARS', 12, 4, 128);
+/** Lower defaults tolerate short phrases; finals-only comparisons keep playout stable under interim jitter. */
+const ASR_REWRITE_MIN_COMMON = parseEnvInt('VOISA_ASR_REWRITE_MIN_COMMON_CHARS', 6, 1, 128);
 
 function commonPrefixLength(a: string, b: string): number {
   const n = Math.min(a.length, b.length);
@@ -130,10 +131,14 @@ export class VoisaInterpretationCoordinator {
     return common < ASR_REWRITE_MIN_COMMON;
   }
 
-  #syncOriginalAndMaybeInvalidateTranslation(original: string): void {
+  /**
+   * Interim `original` zig-zags (“hello wor…” → glitch → “tell me…”); wiping TTS mid-utterance on every jitter
+   * skips most of the translation. Invalidate only after Soniox marks **`isFinal`**, matching a committed hypothesis.
+   */
+  #syncOriginalAndMaybeInvalidateTranslation(original: string, isFinal: boolean): void {
     const o = sanitizeLine(original);
     const prev = this.#cumulativeOriginal;
-    if (this.#shouldInvalidateTranslationBuffer(prev, o)) {
+    if (isFinal && this.#shouldInvalidateTranslationBuffer(prev, o)) {
       this.#cumulative = '';
       this.#buf = '';
       this.#streamSentLen = 0;
@@ -291,7 +296,7 @@ export class VoisaInterpretationCoordinator {
   }
 
   onTranscript(payload: VoisaTranscriptBridgePayload): void {
-    this.#syncOriginalAndMaybeInvalidateTranslation(payload.original ?? '');
+    this.#syncOriginalAndMaybeInvalidateTranslation(payload.original ?? '', payload.isFinal);
 
     const line = ttsLine(payload);
 

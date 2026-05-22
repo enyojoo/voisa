@@ -167,13 +167,27 @@ function sonioxFinalTokenKey(t: SonioxToken): string | null {
   return null;
 }
 
+/** Fallback when timestamps are missing: collapses redundant repeated finals only (immediate neighbor). */
+function sonioxWeakFinalDedupKey(t: SonioxToken): string | null {
+  if (!t.is_final || typeof t.text !== 'string') return null;
+  const text = String(t.text).trim();
+  if (!text) return null;
+  return `${t.translation_status ?? 'none'}\0${text}`;
+}
+
 function persistFinalsHasDuplicate(list: SonioxToken[], token: SonioxToken): boolean {
-  const k = sonioxFinalTokenKey(token);
-  if (!k) return false;
-  for (const p of list) {
-    if (sonioxFinalTokenKey(p) === k) return true;
+  const strong = sonioxFinalTokenKey(token);
+  if (strong) {
+    for (const p of list) {
+      if (sonioxFinalTokenKey(p) === strong) return true;
+    }
+    return false;
   }
-  return false;
+  if (!token.is_final) return false;
+  const w = sonioxWeakFinalDedupKey(token);
+  if (!w) return false;
+  const last = list[list.length - 1];
+  return last ? sonioxWeakFinalDedupKey(last) === w : false;
 }
 
 /** Soniox semantic endpoint marker (`<end>`). See https://soniox.com/docs/stt/rt/endpoint-detection */
